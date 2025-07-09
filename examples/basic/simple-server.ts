@@ -1,5 +1,5 @@
 // Basic Example - Simple server setup
-import { createApp, type Context } from '../../src/index.js';
+import { createApp, type Context } from 'imphnen.js';
 
 const app = createApp();
 

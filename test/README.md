@@ -34,7 +34,7 @@ You can also use popular testing frameworks:
 
 ### Unit Test Example
 ```typescript
-import { createApp } from '../src/index.js';
+import { createApp } from 'imphnen.js';
 
 const app = createApp();
 app.get('/test', (ctx) => ctx.json({ success: true }));
@@ -42,8 +42,8 @@ app.get('/test', (ctx) => ctx.json({ success: true }));
 
 ### Integration Test Example
 ```typescript
-import { createApp } from '../src/index.js';
-import type { Middleware } from '../src/index.js';
+import { createApp } from 'imphnen.js';
+import type { Middleware } from 'imphnen.js';
 
 const authMiddleware: Middleware = async (ctx, next) => {
   // auth logic

@@ -14,6 +14,13 @@
     "verbatimModuleSyntax": true,
     "noEmit": true,
 
+    // Path mapping for development
+    "baseUrl": ".",
+    "paths": {
+      "imphnen.js": ["./index.ts"],
+      "imphnen.js/*": ["./src/*"]
+    },
+
     // Best practices
     "strict": true,
     "skipLibCheck": true,
@@ -24,5 +31,16 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
-  }
+  },
+  "include": [
+    "src/**/*",
+    "examples/**/*",
+    "test/**/*",
+    "index.ts",
+    "index.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

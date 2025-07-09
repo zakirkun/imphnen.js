@@ -15,7 +15,9 @@ export type {
   Handler, 
   Middleware, 
   RouteParams,
-  ImphnenOptions 
+  ImphnenOptions,
+  UploadedFile,
+  ProxyOptions
 } from './types.js';
 
 export type {

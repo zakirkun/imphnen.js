@@ -9,26 +9,45 @@ Welcome to imphnen.js! This guide will help you get up and running with the fram
 
 ## Installation
 
-### Clone the Repository
+### Install Framework
+
+Create a new project and install imphnen.js:
 
 ```bash
-git clone <repository-url>
-cd imphnen.js
-bun install
+# Create new project directory
+mkdir my-imphnen-app
+cd my-imphnen-app
+
+# Initialize project
+bun init
+
+# Install imphnen.js framework
+bun add imphnen.js
+
+# Install TypeScript definitions (if needed)
+bun add -D @types/node typescript
 ```
 
-### Project Structure
+### Project Setup
 
-After cloning, you'll see this structure:
+Create a basic TypeScript configuration:
 
-```
-imphnen.js/
-├── src/           # Framework source code
-├── examples/      # Usage examples
-├── docs/          # Documentation
-├── test/          # Test suite
-├── index.ts       # Main entry point
-└── package.json   # Dependencies
+```json
+// tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules"]
+}
 ```
 
 ## Your First Server
@@ -37,7 +56,7 @@ Create a simple server file:
 
 ```typescript
 // server.ts
-import { createApp } from './src/index.js';
+import { createApp } from 'imphnen.js';
 
 const app = createApp({
   port: 3000,
@@ -75,7 +94,7 @@ Visit `http://localhost:3000` to see your server in action!
 ### 1. Application Creation
 
 ```typescript
-import { createApp } from './src/index.js';
+import { createApp } from 'imphnen.js';
 
 const app = createApp({
   port: 3000,           // Server port
@@ -273,22 +292,58 @@ app.get('/api/data/:id', async (ctx) => {
 });
 ```
 
-## Running Examples
+## Example Applications
 
-The framework comes with comprehensive examples:
+### Basic Web Server
 
-```bash
-# Basic server example
-bun run examples/basic/simple-server.ts
+```typescript
+// src/server.ts
+import { createApp } from 'imphnen.js';
 
-# Complete demo with all features
-bun run examples/complete-demo.ts
+const app = createApp({
+  port: 3000,
+  cors: true,
+  development: true
+});
 
-# File upload example
-bun run examples/file-upload/upload-demo.ts
+// Routes
+app.get('/', (ctx) => ctx.json({ message: 'Welcome to imphnen.js!' }));
+app.get('/health', (ctx) => ctx.text('OK'));
+app.get('/users/:id', (ctx) => ctx.json({ user: ctx.params.id }));
 
-# Middleware examples
-bun run examples/middleware/auth-example.ts
+await app.listen();
+```
+
+### API Server with File Upload
+
+```typescript
+// src/api-server.ts
+import { createApp } from 'imphnen.js';
+
+const app = createApp({
+  port: 3001,
+  cors: true,
+  uploads: {
+    maxFileSize: 10 * 1024 * 1024, // 10MB
+    allowedTypes: ['image/*', 'application/pdf']
+  }
+});
+
+// API routes
+app.get('/api/status', (ctx) => ctx.json({ status: 'running' }));
+
+app.post('/api/upload', async (ctx) => {
+  if (!ctx.files?.length) {
+    return ctx.json({ error: 'No files' }, { status: 400 });
+  }
+  
+  return ctx.json({
+    uploaded: ctx.files.length,
+    files: ctx.files.map(f => ({ name: f.name, size: f.size }))
+  });
+});
+
+await app.listen();
 ```
 
 ## Development Tips
@@ -334,6 +389,8 @@ Structure your application:
 
 ```typescript
 // routes/users.ts
+import type { Imphnen } from 'imphnen.js';
+
 export const userRoutes = (app: Imphnen) => {
   app.get('/users', getAllUsers);
   app.get('/users/:id', getUserById);
@@ -341,6 +398,7 @@ export const userRoutes = (app: Imphnen) => {
 };
 
 // server.ts
+import { createApp } from 'imphnen.js';
 import { userRoutes } from './routes/users.js';
 
 const app = createApp();
@@ -352,6 +410,8 @@ await app.listen();
 
 ```typescript
 // middleware/auth.ts
+import type { Context } from 'imphnen.js';
+
 export const authMiddleware = async (ctx: Context, next: () => Promise<Response>) => {
   const token = ctx.headers.get('authorization');
   if (!token) {
@@ -362,8 +422,10 @@ export const authMiddleware = async (ctx: Context, next: () => Promise<Response>
 };
 
 // server.ts
+import { createApp } from 'imphnen.js';
 import { authMiddleware } from './middleware/auth.js';
 
+const app = createApp();
 app.use(authMiddleware);
 ```
 
@@ -377,12 +439,23 @@ curl http://localhost:3000/
 curl -X POST http://localhost:3000/data -d '{"name":"test"}' -H "Content-Type: application/json"
 ```
 
-### Using the Test Client
+### Using Bun's Built-in Test Runner
 
-The framework includes a test client:
+```typescript
+// test/server.test.ts
+import { test, expect } from 'bun:test';
+import { createApp } from 'imphnen.js';
 
-```bash
-bun run test/client/test-client.ts
+test('server responds to GET /', async () => {
+  const app = createApp();
+  app.get('/', (ctx) => ctx.json({ message: 'test' }));
+  
+  const req = new Request('http://localhost:3000/');
+  const res = await app.handler(req);
+  const data = await res.json();
+  
+  expect(data).toEqual({ message: 'test' });
+});
 ```
 
 ## Next Steps
@@ -400,7 +473,7 @@ Now that you have a basic server running, explore these topics:
 ### TypeScript Errors
 
 If you see TypeScript errors, ensure:
-- You're using `./src/index.js` imports (not `.ts`)
+- You're using `imphnen.js` imports (not relative paths)
 - Your `tsconfig.json` is properly configured
 - All dependencies are installed
 
@@ -440,8 +513,7 @@ const app = createApp({
 ## Getting Help
 
 - **Documentation**: Browse the [docs](../README.md) directory
-- **Examples**: Check the `examples/` directory
-- **Issues**: Report problems on GitHub
+- **GitHub Issues**: Report problems and request features
 - **API Reference**: See [API documentation](../api/)
 
 Happy coding with imphnen.js! 🚀 

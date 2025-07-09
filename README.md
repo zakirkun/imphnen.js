@@ -17,90 +17,202 @@ A modern TypeScript web server framework with end-to-end type safety, built for 
 - 🔒 **Security Features**: Path traversal prevention, file validation, CORS with credentials
 - 📖 **Complete Documentation**: Comprehensive docs, examples, and API reference
 
-## Quick Start
+## Installation
+
+### Prerequisites
+
+Before installing imphnen.js, ensure you have:
+
+- **Bun runtime**: imphnen.js is optimized for Bun. [Install Bun](https://bun.sh/)
+- **Node.js 18+**: Alternative runtime support
+- **TypeScript**: For full type safety benefits
+
+### Install Framework
+
+#### Option 1: Install from npm (Recommended)
 
 ```bash
-# Clone and install
-git clone <repository>
+# Create new project
+mkdir my-imphnen-app
+cd my-imphnen-app
+
+# Initialize project
+bun init
+
+# Install imphnen.js framework
+bun add imphnen.js
+
+# Install type definitions (if not included)
+bun add -D @types/node
+```
+
+#### Option 2: Development Installation
+
+```bash
+# Clone the repository for development
+git clone https://github.com/zakirkun/imphnen.js
 cd imphnen.js
 bun install
 
-# Run examples
-bun run examples/complete-demo.ts              # Full demo (Port 3000)
-bun run examples/basic/simple-server.ts        # Basic server (Port 3001)
-bun run examples/file-upload/upload-demo.ts    # File upload demo (Port 3004)
+# Build the framework
+bun run build
+
+# Link for local development
+bun link
+
+# In your project directory
+bun link imphnen.js
 ```
 
-## Project Structure
+### Quick Setup
+
+Create your first server:
+
+```typescript
+// server.ts
+import { createApp } from 'imphnen.js';
+
+const app = createApp({
+  port: 3000,
+  development: true,
+  cors: true
+});
+
+app.get('/', (ctx) => {
+  return ctx.json({ message: 'Hello from imphnen.js!' });
+});
+
+console.log('Starting server...');
+await app.listen();
+console.log('🚀 Server running on http://localhost:3000');
+```
+
+Run your server:
+
+```bash
+# With Bun (recommended)
+bun run server.ts
+
+# With Node.js + tsx
+npx tsx server.ts
+
+# With ts-node
+npx ts-node server.ts
+```
+
+### Project Structure Setup
+
+For a well-organized project:
+
+```bash
+# Create project structure
+mkdir src routes middleware utils
+touch src/server.ts routes/index.ts middleware/auth.ts
+```
 
 ```
-imphnen.js/
-├── src/                          # Framework source code
-│   ├── app.ts                    # Main application class (unified)
-│   ├── pipeline.ts               # Advanced middleware pipeline system
-│   ├── types.ts                  # Core type definitions
-│   ├── utils.ts                  # Utility functions
-│   ├── context.ts               # Request context handling
-│   └── index.ts                 # Main exports
-├── examples/                     # Usage examples organized by feature
-│   ├── complete-demo.ts          # Full framework demonstration
-│   ├── basic/                    # Simple server examples
-│   │   └── simple-server.ts      # Basic routing and responses
-│   ├── middleware/               # Middleware examples
-│   │   └── auth-example.ts       # Authentication & logging
-│   ├── pipeline/                 # Advanced pipeline examples
-│   │   └── advanced-pipeline.ts  # State composition
-│   ├── file-upload/              # File upload examples
-│   │   ├── upload-demo.ts        # Complete upload server
-│   │   ├── upload-client.html    # Interactive test client
-│   │   └── README.md             # Upload documentation
-│   └── README.md                 # Examples documentation
-├── docs/                         # Comprehensive documentation
-│   ├── api/                      # Complete API reference
-│   │   ├── application.md        # Application class methods
-│   │   ├── context.md            # Context object API
-│   │   ├── middleware.md         # Built-in middleware
-│   │   ├── pipeline.md           # Pipeline system
-│   │   ├── types.md              # Type definitions
-│   │   └── utils.md              # Utility functions
-│   ├── guides/                   # Feature implementation guides
-│   │   ├── getting-started.md    # Quick start guide
-│   │   ├── file-uploads.md       # File upload implementation
-│   │   ├── proxy-requests.md     # Proxy configuration
-│   │   ├── static-files.md       # Static file serving
-│   │   ├── authentication.md     # Auth implementation
-│   │   ├── middleware.md         # Middleware patterns
-│   │   ├── pipelines.md          # Pipeline usage
-│   │   ├── security.md           # Security best practices
-│   │   └── deployment.md         # Production deployment
-│   ├── examples/                 # Documented usage examples
-│   │   ├── basic-server.md       # Basic server setup
-│   │   ├── file-upload.md        # File handling examples
-│   │   ├── authentication.md     # Auth examples
-│   │   ├── middleware.md         # Middleware examples
-│   │   └── advanced.md           # Advanced patterns
-│   ├── reference/                # Technical reference
-│   │   ├── configuration.md      # Configuration options
-│   │   ├── error-handling.md     # Error management
-│   │   ├── performance.md        # Performance optimization
-│   │   └── troubleshooting.md    # Common issues
-│   └── README.md                 # Documentation index
-├── test/                         # Test suite
-│   ├── unit/                     # Unit tests
-│   ├── integration/              # Integration tests
-│   ├── performance/              # Load testing
-│   ├── client/                   # HTTP test client
-│   └── README.md                 # Testing documentation
-├── index.ts                      # Main entry point
-├── index.d.ts                    # Complete TypeScript definitions
-├── package.json                  # Dependencies
-└── README.md                     # This file
+my-imphnen-app/
+├── src/
+│   ├── server.ts          # Main server file
+│   ├── config.ts          # Configuration
+│   └── types.ts           # Custom types
+├── routes/
+│   ├── index.ts           # Route definitions
+│   ├── users.ts           # User routes
+│   └── api.ts             # API routes
+├── middleware/
+│   ├── auth.ts            # Authentication
+│   ├── validation.ts      # Request validation
+│   └── logging.ts         # Request logging
+├── utils/
+│   └── helpers.ts         # Utility functions
+├── uploads/               # File upload directory
+├── public/                # Static files
+├── package.json
+└── tsconfig.json
 ```
+
+### Configuration Files
+
+#### TypeScript Configuration
+
+Create `tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "allowJs": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true
+  },
+  "include": ["src/**/*", "routes/**/*", "middleware/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
+```
+
+#### Package.json Scripts
+
+Add useful scripts to `package.json`:
+
+```json
+{
+  "name": "my-imphnen-app",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/server.ts",
+    "start": "bun src/server.ts",
+    "build": "bun build src/server.ts --outdir dist",
+    "test": "bun test",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "imphnen.js": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
+```
+
+## Quick Start
+
+```bash
+# Create project and install
+mkdir my-app && cd my-app
+bun init
+bun add imphnen.js
+
+# Create server file
+echo 'import { createApp } from "imphnen.js";
+
+const app = createApp({ port: 3000, cors: true });
+
+app.get("/", (ctx) => ctx.json({ message: "Hello World!" }));
+
+await app.listen();
+console.log("🚀 Server running on http://localhost:3000");' > server.ts
+
+# Run server
+bun run server.ts
+```
+
+Visit `http://localhost:3000` to see your server running!
 
 ## Basic Usage
 
 ```typescript
-import { createApp } from './src/index.js';
+import { createApp } from 'imphnen.js';
 
 const app = createApp({
   port: 3000,
@@ -248,7 +360,7 @@ app.delete('/files/:filename', async (ctx) => {
 Type-safe middleware composition with state management:
 
 ```typescript
-import { createApp } from './src/index.js';
+import { createApp } from 'imphnen.js';
 
 const app = createApp();
 
@@ -463,11 +575,3 @@ This framework is feature-complete and production-ready:
 - ✅ Security features: CORS, file validation, path traversal prevention
 - ✅ Performance optimizations for file handling and request processing
 - ✅ Production deployment ready with error handling and logging
-
-## License
-
-[License information]
-
-## Contributing
-
-[Contributing guidelines]

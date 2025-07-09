@@ -1,6 +1,6 @@
 // Advanced Pipeline Example - Middleware composition
-import { createApp } from '../../src/index.js';
-import type { Context, Middleware } from '../../src/index.js';
+import { createApp } from 'imphnen.js';
+import type { Context, Middleware } from 'imphnen.js';
 
 const app = createApp({
   port: 3003,

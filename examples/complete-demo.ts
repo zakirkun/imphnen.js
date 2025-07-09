@@ -1,7 +1,7 @@
 // Complete Demo - Full usage example of imphnen.js framework
 
-import { createApp } from '../src/index.js';
-import type { Context, Middleware } from '../src/index.js';
+import { createApp } from 'imphnen.js';
+import type { Context, Middleware } from 'imphnen.js';
 
 const app = createApp({
   port: 3000,

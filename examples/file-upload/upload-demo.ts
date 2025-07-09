@@ -1,7 +1,7 @@
 // File Upload Example - Comprehensive file upload functionality
-import { createApp } from '../../src/index.js';
-import type { Context } from '../../src/index.js';
-import type { UploadedFile } from '../../src/types.js';
+import { createApp } from 'imphnen.js';
+import type { Context } from 'imphnen.js';
+import type { UploadedFile } from 'imphnen.js';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 

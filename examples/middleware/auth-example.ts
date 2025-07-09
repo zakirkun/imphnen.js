@@ -1,7 +1,7 @@
 // Middleware Example - Authentication and logging middleware
-import { createApp } from '../../src/index.js';
-import type { Middleware } from '../../src/index.js';
-import type { Context } from '../../src/index.js';
+import { createApp } from 'imphnen.js';
+import type { Middleware } from 'imphnen.js';
+import type { Context } from 'imphnen.js';
 
 const app = createApp({
   port: 3002,

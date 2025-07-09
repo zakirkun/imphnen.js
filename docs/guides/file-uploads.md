@@ -7,7 +7,7 @@ This guide covers everything you need to know about implementing file uploads wi
 Enable file uploads in your application:
 
 ```typescript
-import { createApp } from './src/index.js';
+import { createApp } from 'imphnen.js';
 
 const app = createApp({
   uploads: {
