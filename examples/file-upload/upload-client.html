@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Upload Client Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .upload-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+            background: #fafafa;
+        }
+        .upload-section:hover {
+            border-color: #007bff;
+            background: #f8f9ff;
+        }
+        .file-input {
+            margin: 10px 0;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 100%;
+        }
+        .text-input {
+            margin: 10px 0;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .upload-btn {
+            background: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px 10px 0;
+        }
+        .upload-btn:hover {
+            background: #0056b3;
+        }
+        .upload-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin: 15px 0;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background: #e2f3ff;
+            border: 1px solid #b3d7ff;
+            color: #0c5460;
+        }
+        .file-list {
+            margin-top: 20px;
+        }
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            margin: 5px 0;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+        }
+        .file-item button {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .file-item button:hover {
+            background: #c82333;
+        }
+        .progress {
+            width: 100%;
+            height: 20px;
+            background-color: #f0f0f0;
+            border-radius: 10px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background-color: #007bff;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <h1>📁 File Upload Client Test</h1>
+    <p>Test client for imphnen.js file upload functionality. Make sure the server is running on <code>http://localhost:3004</code></p>
+
+    <div class="container">
+        <h2>Single File Upload</h2>
+        <div class="upload-section">
+            <input type="file" id="singleFile" class="file-input">
+            <input type="text" id="singleDescription" class="text-input" placeholder="File description (optional)">
+            <button onclick="uploadSingle()" class="upload-btn">Upload Single File</button>
+            <div id="singleResult"></div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Multiple File Upload</h2>
+        <div class="upload-section">
+            <input type="file" id="multipleFiles" class="file-input" multiple>
+            <input type="text" id="multipleCategory" class="text-input" placeholder="Category (optional)">
+            <button onclick="uploadMultiple()" class="upload-btn">Upload Multiple Files</button>
+            <div id="multipleResult"></div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Image Upload</h2>
+        <div class="upload-section">
+            <input type="file" id="imageFile" class="file-input" accept="image/*">
+            <input type="text" id="imageAltText" class="text-input" placeholder="Alt text for image">
+            <button onclick="uploadImage()" class="upload-btn">Upload Image</button>
+            <div id="imageResult"></div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>API Upload (with Progress)</h2>
+        <div class="upload-section">
+            <input type="file" id="apiFiles" class="file-input" multiple>
+            <button onclick="uploadAPI()" class="upload-btn">Upload via API</button>
+            <div class="progress" id="apiProgress" style="display: none;">
+                <div class="progress-bar" id="apiProgressBar"></div>
+            </div>
+            <div id="apiResult"></div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>File Management</h2>
+        <button onclick="listFiles()" class="upload-btn">Refresh File List</button>
+        <div id="fileList" class="file-list"></div>
+    </div>
+
+    <script>
+        const SERVER_URL = 'http://localhost:3004';
+
+        function showResult(elementId, content, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<div class="result ${type}">${content}</div>`;
+        }
+
+        async function uploadSingle() {
+            const fileInput = document.getElementById('singleFile');
+            const descriptionInput = document.getElementById('singleDescription');
+            
+            if (!fileInput.files[0]) {
+                showResult('singleResult', 'Please select a file', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('description', descriptionInput.value);
+
+            try {
+                showResult('singleResult', 'Uploading...', 'info');
+                const response = await fetch(`${SERVER_URL}/upload/single`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showResult('singleResult', `Success!\n${JSON.stringify(result, null, 2)}`, 'success');
+                    listFiles(); // Refresh file list
+                } else {
+                    showResult('singleResult', `Error: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showResult('singleResult', `Network error: ${error.message}`, 'error');
+            }
+        }
+
+        async function uploadMultiple() {
+            const fileInput = document.getElementById('multipleFiles');
+            const categoryInput = document.getElementById('multipleCategory');
+            
+            if (!fileInput.files.length) {
+                showResult('multipleResult', 'Please select at least one file', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            Array.from(fileInput.files).forEach(file => {
+                formData.append('files', file);
+            });
+            formData.append('category', categoryInput.value);
+
+            try {
+                showResult('multipleResult', 'Uploading...', 'info');
+                const response = await fetch(`${SERVER_URL}/upload/multiple`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showResult('multipleResult', `Success!\n${JSON.stringify(result, null, 2)}`, 'success');
+                    listFiles();
+                } else {
+                    showResult('multipleResult', `Error: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showResult('multipleResult', `Network error: ${error.message}`, 'error');
+            }
+        }
+
+        async function uploadImage() {
+            const fileInput = document.getElementById('imageFile');
+            const altTextInput = document.getElementById('imageAltText');
+            
+            if (!fileInput.files[0]) {
+                showResult('imageResult', 'Please select an image', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('image', fileInput.files[0]);
+            formData.append('alt_text', altTextInput.value);
+
+            try {
+                showResult('imageResult', 'Uploading...', 'info');
+                const response = await fetch(`${SERVER_URL}/upload/image`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showResult('imageResult', `Success!\n${JSON.stringify(result, null, 2)}`, 'success');
+                    listFiles();
+                } else {
+                    showResult('imageResult', `Error: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showResult('imageResult', `Network error: ${error.message}`, 'error');
+            }
+        }
+
+        async function uploadAPI() {
+            const fileInput = document.getElementById('apiFiles');
+            
+            if (!fileInput.files.length) {
+                showResult('apiResult', 'Please select at least one file', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            Array.from(fileInput.files).forEach(file => {
+                formData.append('files', file);
+            });
+
+            try {
+                const progressElement = document.getElementById('apiProgress');
+                const progressBar = document.getElementById('apiProgressBar');
+                
+                progressElement.style.display = 'block';
+                progressBar.style.width = '0%';
+                
+                showResult('apiResult', 'Uploading via API...', 'info');
+
+                // Simulate progress (in real app, you'd use XMLHttpRequest for progress)
+                let progress = 0;
+                const progressInterval = setInterval(() => {
+                    progress += Math.random() * 30;
+                    if (progress >= 90) progress = 90;
+                    progressBar.style.width = progress + '%';
+                }, 200);
+
+                const response = await fetch(`${SERVER_URL}/api/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                clearInterval(progressInterval);
+                progressBar.style.width = '100%';
+
+                const result = await response.json();
+                
+                setTimeout(() => {
+                    progressElement.style.display = 'none';
+                }, 1000);
+                
+                if (response.ok) {
+                    showResult('apiResult', `API Upload Success!\n${JSON.stringify(result, null, 2)}`, 'success');
+                    listFiles();
+                } else {
+                    showResult('apiResult', `API Error: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                document.getElementById('apiProgress').style.display = 'none';
+                showResult('apiResult', `Network error: ${error.message}`, 'error');
+            }
+        }
+
+        async function listFiles() {
+            try {
+                const response = await fetch(`${SERVER_URL}/files`);
+                const result = await response.json();
+                
+                if (response.ok) {
+                    const fileListElement = document.getElementById('fileList');
+                    
+                    if (result.files.length === 0) {
+                        fileListElement.innerHTML = '<p>No files uploaded yet.</p>';
+                        return;
+                    }
+                    
+                    const fileItems = result.files.map(file => `
+                        <div class="file-item">
+                            <div>
+                                <strong>${file.filename}</strong><br>
+                                <small>Size: ${formatBytes(file.size)} | Uploaded: ${new Date(file.uploadedAt).toLocaleString()}</small>
+                            </div>
+                            <div>
+                                <button onclick="downloadFile('${file.filename}')">Download</button>
+                                <button onclick="deleteFile('${file.filename}')">Delete</button>
+                            </div>
+                        </div>
+                    `).join('');
+                    
+                    fileListElement.innerHTML = `
+                        <h3>Uploaded Files (${result.files.length})</h3>
+                        ${fileItems}
+                    `;
+                } else {
+                    showResult('fileList', `Error loading files: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showResult('fileList', `Network error: ${error.message}`, 'error');
+            }
+        }
+
+        async function downloadFile(filename) {
+            try {
+                const response = await fetch(`${SERVER_URL}/files/${filename}?download=true`);
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                } else {
+                    alert('Failed to download file');
+                }
+            } catch (error) {
+                alert(`Download error: ${error.message}`);
+            }
+        }
+
+        async function deleteFile(filename) {
+            if (!confirm(`Are you sure you want to delete ${filename}?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${SERVER_URL}/files/${filename}`, {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    alert('File deleted successfully');
+                    listFiles(); // Refresh list
+                } else {
+                    alert(`Delete error: ${result.error}`);
+                }
+            } catch (error) {
+                alert(`Network error: ${error.message}`);
+            }
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Load file list on page load
+        document.addEventListener('DOMContentLoaded', listFiles);
+    </script>
+</body>
+</html> 

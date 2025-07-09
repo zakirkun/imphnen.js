@@ -1,0 +1,31 @@
+{
+  "name": "imphnen.js",
+  "version": "0.1.0",
+  "description": "A TypeScript web server framework with humanistic syntax, end-to-end type safety, and exceptional developer experience using Bun",
+  "module": "index.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch index.ts",
+    "start": "bun run index.ts",
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "typescript",
+    "web-framework",
+    "bun",
+    "type-safe",
+    "http-server",
+    "middleware",
+    "routing"
+  ],
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  }
+}
