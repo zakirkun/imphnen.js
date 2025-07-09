@@ -1,6 +1,6 @@
 {
   "name": "imphnen.js",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A TypeScript web server framework with humanistic syntax, end-to-end type safety, and exceptional developer experience using Bun",
   "main": "index.ts",
   "module": "index.ts",

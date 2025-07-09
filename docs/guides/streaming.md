@@ -41,9 +41,9 @@ Manual streaming gives you complete control over the streaming process through t
 ### Basic Usage
 
 ```typescript
-import { Imphnen } from 'imphnen.js';
+import { createApp } from 'imphnen.js';
 
-const app = new Imphnen();
+const app = createApp();
 
 app.get('/stream/manual', async (ctx) => {
   const stream = await ctx.createStream({
@@ -591,10 +591,10 @@ app.get('/logs/live', async (ctx) => {
 ```typescript
 // test/streaming.test.ts
 import { describe, it, expect } from 'bun:test';
-import { Imphnen } from 'imphnen.js';
+import { createApp } from 'imphnen.js';
 
 describe('Streaming', () => {
-  const app = new Imphnen();
+  const app = createApp();
   
   app.get('/test-stream', async (ctx) => {
     const stream = await ctx.createStream();
