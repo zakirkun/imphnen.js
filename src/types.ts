@@ -77,6 +77,27 @@ export interface ProxyOptions {
   onProxyRes?: (proxyRes: Response, req: Request) => void;
 }
 
+// Streaming response types
+export interface StreamingOptions {
+  contentType?: string;
+  headers?: Record<string, string>;
+  bufferSize?: number;
+  flushInterval?: number;
+}
+
+export interface ChunkOptions {
+  encoding?: 'utf-8' | 'base64' | 'hex';
+  headers?: Record<string, string>;
+}
+
+export interface ServerSentEventOptions {
+  id?: string;
+  event?: string;
+  retry?: number;
+  headers?: Record<string, string>;
+}
+
+// Enhanced context with streaming support
 export type Context<
   TParams extends Record<string, string> = {},
   TQuery extends Record<string, string> = {},
@@ -103,6 +124,18 @@ export type Context<
   stream: (stream: ReadableStream, contentType?: string) => Response;
   // Proxy helper
   proxy: (options: ProxyOptions) => Promise<Response>;
+  // Streaming response helpers
+  createStream: (options?: StreamingOptions) => Promise<{
+    controller: ReadableStreamDefaultController<Uint8Array>;
+    response: Response;
+    write: (chunk: string | Uint8Array) => void;
+    writeChunk: (data: any, options?: ChunkOptions) => void;
+    writeSSE: (data: any, options?: ServerSentEventOptions) => void;
+    close: () => void;
+  }>;
+  streamResponse: (generator: AsyncGenerator<string | Uint8Array, void, unknown>, options?: StreamingOptions) => Response;
+  chunkedResponse: (chunks: (string | Uint8Array)[], options?: ChunkOptions) => Response;
+  sseResponse: (generator: AsyncGenerator<any, void, unknown>, options?: ServerSentEventOptions) => Response;
 };
 
 export type Handler<

@@ -1,7 +1,13 @@
 // Context implementation for imphnen.js framework
 
-import type { Context as ContextType, UploadedFile, ProxyOptions } from './types.js';
+import type { Context as ContextType, UploadedFile, ProxyOptions, StreamingOptions, ChunkOptions, ServerSentEventOptions } from './types.js';
 import { createResponse, proxyRequest, serveFile } from './utils.js';
+import { 
+  createStreamingResponse, 
+  createStreamResponse, 
+  createChunkedResponse, 
+  createSSEResponse 
+} from './streaming.js';
 
 export function createContext<
   TParams extends Record<string, string> = {},
@@ -194,6 +200,128 @@ export function createContext<
         status: responseStatus !== 200 ? responseStatus : response.status,
         headers
       });
+    },
+
+    // Streaming response methods
+    createStream: async (options?: StreamingOptions) => {
+      const streamOptions = {
+        ...options,
+        headers: {
+          ...Object.fromEntries(responseHeaders.entries()),
+          ...(options?.headers || {})
+        }
+      };
+      
+      const streamResult = await createStreamingResponse(streamOptions);
+      
+      return {
+        controller: undefined as any, // Legacy compatibility
+        response: streamResult.response,
+        write: streamResult.write,
+        writeChunk: (data: any, chunkOptions?: ChunkOptions) => {
+          // For chunked encoding, we need to format the data properly
+          let chunk: string;
+          if (typeof data === 'string') {
+            chunk = data;
+          } else {
+            chunk = JSON.stringify(data);
+          }
+          
+          const encoding = chunkOptions?.encoding || 'utf-8';
+          const chunkSize = Buffer.byteLength(chunk, encoding as BufferEncoding).toString(16);
+          const formattedChunk = `${chunkSize}\r\n${chunk}\r\n`;
+          
+          streamResult.write(formattedChunk);
+        },
+        writeSSE: (data: any, sseOptions?: ServerSentEventOptions) => {
+          let sseData = '';
+          
+          if (sseOptions?.id) {
+            sseData += `id: ${sseOptions.id}\n`;
+          }
+          
+          if (sseOptions?.event) {
+            sseData += `event: ${sseOptions.event}\n`;
+          }
+          
+          if (sseOptions?.retry) {
+            sseData += `retry: ${sseOptions.retry}\n`;
+          }
+          
+          const dataString = typeof data === 'string' ? data : JSON.stringify(data);
+          sseData += `data: ${dataString}\n\n`;
+          
+          streamResult.write(sseData);
+        },
+        close: streamResult.close
+      };
+    },
+
+    streamResponse: (generator: AsyncGenerator<string | Uint8Array, void, unknown>, options?: StreamingOptions) => {
+      const streamOptions = {
+        ...options,
+        headers: {
+          ...Object.fromEntries(responseHeaders.entries()),
+          ...(options?.headers || {})
+        }
+      };
+      
+      return createStreamResponse(generator, streamOptions);
+    },
+
+    chunkedResponse: (chunks: (string | Uint8Array)[], options?: ChunkOptions) => {
+      const chunkOptions = {
+        ...options,
+        headers: {
+          ...Object.fromEntries(responseHeaders.entries()),
+          ...(options?.headers || {})
+        }
+      };
+      
+      // Create a chunked response from the array
+      const { response, writeChunk, close } = createChunkedResponse(chunkOptions);
+      
+      // Write all chunks and close
+      setTimeout(async () => {
+        try {
+          for (const chunk of chunks) {
+            writeChunk(chunk);
+          }
+          close();
+        } catch (error) {
+          console.error('Error writing chunks:', error);
+        }
+      }, 0);
+      
+      return response;
+    },
+
+    sseResponse: (generator: AsyncGenerator<any, void, unknown>, options?: ServerSentEventOptions) => {
+      const sseOptions = {
+        ...options,
+        headers: {
+          ...Object.fromEntries(responseHeaders.entries()),
+          ...(options?.headers || {})
+        }
+      };
+      
+      // Create SSE response and handle the generator
+      const { response, writeEvent, close } = createSSEResponse(sseOptions);
+      
+      // Process the async generator
+      setTimeout(async () => {
+        try {
+          for await (const data of generator) {
+            writeEvent(data, options);
+          }
+          close();
+        } catch (error) {
+          console.error('Error processing SSE generator:', error);
+          close();
+        }
+      }, 0);
+      
+      return response;
     }
   };
 

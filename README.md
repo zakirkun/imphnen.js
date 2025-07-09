@@ -12,6 +12,8 @@ A modern TypeScript web server framework with end-to-end type safety, built for 
 - 🔄 **Proxy Support**: Request proxying and forwarding capabilities with headers and timeout control
 - 📂 **Static File Serving**: Efficient static file delivery with download options
 - 🚀 **Advanced Pipelines**: Sophisticated middleware composition with generic state management
+- 🌊 **Streaming Responses**: Real-time streaming, chunked transfer, and Server-Sent Events (SSE)
+- 🔌 **WebSocket Support**: Type-safe WebSocket connections with event handlers
 - 📦 **Zero Config**: Works out of the box with sensible defaults
 - 🛠️ **Extensible**: Easy to extend with custom middleware and plugins
 - 🔒 **Security Features**: Path traversal prevention, file validation, CORS with credentials
@@ -259,6 +261,363 @@ app.post('/upload', async (ctx) => {
 await app.listen();
 ```
 
+## Streaming Responses
+
+Imphnen.js provides comprehensive streaming support for real-time data transmission and progressive content delivery:
+
+### Manual Streaming Control
+
+```typescript
+app.get('/stream/manual', async (ctx) => {
+  const stream = await ctx.createStream({
+    contentType: 'text/plain; charset=utf-8',
+    headers: {
+      'X-Custom-Header': 'streaming-demo'
+    }
+  });
+
+  // Stream data in real-time
+  for (let i = 1; i <= 10; i++) {
+    stream.write(`Chunk ${i}: ${new Date().toISOString()}\n`);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  
+  stream.close();
+  return stream.response;
+});
+```
+
+### Async Generator Streaming
+
+```typescript
+app.get('/stream/generator', async (ctx) => {
+  async function* dataGenerator() {
+    for (let i = 1; i <= 5; i++) {
+      yield `Generated data ${i}: ${Math.random().toFixed(4)}\n`;
+      await new Promise(resolve => setTimeout(resolve, 800));
+    }
+    yield 'Stream completed!\n';
+  }
+
+  return ctx.streamResponse(dataGenerator(), {
+    contentType: 'text/plain; charset=utf-8',
+    headers: { 'X-Stream-Type': 'generator' }
+  });
+});
+```
+
+### Server-Sent Events (SSE)
+
+```typescript
+app.get('/stream/events', async (ctx) => {
+  async function* eventGenerator() {
+    for (let i = 1; i <= 10; i++) {
+      yield {
+        id: i,
+        message: `Event ${i}`,
+        timestamp: new Date().toISOString(),
+        data: Math.random() * 100
+      };
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  }
+
+  return ctx.sseResponse(eventGenerator(), {
+    retry: 3000,
+    headers: { 'X-SSE-Demo': 'true' }
+  });
+});
+```
+
+### Chunked Transfer Encoding
+
+```typescript
+app.get('/stream/chunked', async (ctx) => {
+  const chunks = [
+    'First chunk of data\n',
+    { message: 'JSON chunk', timestamp: Date.now() },
+    'Final chunk - goodbye!'
+  ];
+
+  return ctx.chunkedResponse(chunks, {
+    encoding: 'utf-8',
+    headers: { 'X-Transfer-Type': 'chunked' }
+  });
+});
+```
+
+### Progress Streaming
+
+```typescript
+app.get('/task/:id/progress', async (ctx) => {
+  const stream = await ctx.createStream({
+    contentType: 'application/json'
+  });
+
+  const totalSteps = 20;
+  for (let step = 0; step <= totalSteps; step++) {
+    const progress = {
+      step,
+      total: totalSteps,
+      percentage: Math.round((step / totalSteps) * 100),
+      message: step === totalSteps ? 'Completed!' : `Processing step ${step}...`,
+      timestamp: new Date().toISOString()
+    };
+
+    stream.write(JSON.stringify(progress) + '\n');
+    
+    if (step < totalSteps) {
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+  }
+
+  stream.close();
+  return stream.response;
+});
+```
+
+## WebSocket Support
+
+Type-safe WebSocket connections with comprehensive event handling:
+
+### Basic WebSocket Server
+
+```typescript
+const app = createApp({
+  websocket: {
+    maxPayloadLength: 1024 * 1024, // 1MB
+    idleTimeout: 30,
+    compression: true
+  }
+});
+
+app.ws('/chat/:room', {
+  open: (ctx) => {
+    console.log(`Client connected to room: ${ctx.params.room}`);
+    ctx.ws.send(JSON.stringify({
+      type: 'welcome',
+      message: `Welcome to room ${ctx.params.room}`
+    }));
+  },
+  
+  message: (ctx, message) => {
+    console.log(`Message in ${ctx.params.room}:`, message);
+    
+    // Broadcast to all clients (implementation depends on your needs)
+    const data = JSON.parse(message);
+    ctx.ws.send(JSON.stringify({
+      type: 'message',
+      user: data.user,
+      content: data.content,
+      timestamp: Date.now()
+    }));
+  },
+  
+  close: (ctx, code, reason) => {
+    console.log(`Client disconnected from ${ctx.params.room}:`, code, reason);
+  },
+  
+  error: (ctx, error) => {
+    console.error(`WebSocket error in ${ctx.params.room}:`, error);
+  }
+});
+```
+
+### Real-time Chat Implementation
+
+```typescript
+// In-memory storage for demo (use database in production)
+const chatRooms = new Map<string, Set<WebSocket>>();
+
+app.ws('/chat/:room', {
+  open: (ctx) => {
+    const room = ctx.params.room;
+    
+    // Add client to room
+    if (!chatRooms.has(room)) {
+      chatRooms.set(room, new Set());
+    }
+    chatRooms.get(room)!.add(ctx.ws);
+    
+    // Send welcome message
+    ctx.ws.send(JSON.stringify({
+      type: 'system',
+      message: `Joined room: ${room}`,
+      timestamp: Date.now()
+    }));
+    
+    // Notify others
+    const message = {
+      type: 'user-joined',
+      message: 'A user joined the room',
+      timestamp: Date.now()
+    };
+    
+    for (const client of chatRooms.get(room)!) {
+      if (client !== ctx.ws && client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify(message));
+      }
+    }
+  },
+  
+  message: (ctx, message) => {
+    const room = ctx.params.room;
+    const data = JSON.parse(message);
+    
+    const chatMessage = {
+      type: 'message',
+      user: data.user || 'Anonymous',
+      content: data.content,
+      timestamp: Date.now()
+    };
+    
+    // Broadcast to all clients in room
+    const clients = chatRooms.get(room);
+    if (clients) {
+      for (const client of clients) {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify(chatMessage));
+        }
+      }
+    }
+  },
+  
+  close: (ctx) => {
+    const room = ctx.params.room;
+    const clients = chatRooms.get(room);
+    if (clients) {
+      clients.delete(ctx.ws);
+      
+      // Clean up empty rooms
+      if (clients.size === 0) {
+        chatRooms.delete(room);
+      } else {
+        // Notify remaining clients
+        const message = {
+          type: 'user-left',
+          message: 'A user left the room',
+          timestamp: Date.now()
+        };
+        
+        for (const client of clients) {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify(message));
+          }
+        }
+      }
+    }
+  }
+});
+```
+
+### WebSocket with Authentication
+
+```typescript
+app.ws('/secure/:channel', {
+  open: async (ctx) => {
+    // Validate authentication from query parameters or headers
+    const token = ctx.query.token || ctx.headers.get('authorization');
+    
+    if (!token) {
+      ctx.ws.close(1008, 'Authentication required');
+      return;
+    }
+    
+    try {
+      const user = await validateToken(token);
+      console.log(`Authenticated user ${user.id} connected to ${ctx.params.channel}`);
+      
+      ctx.ws.send(JSON.stringify({
+        type: 'authenticated',
+        user: { id: user.id, name: user.name },
+        channel: ctx.params.channel
+      }));
+    } catch (error) {
+      ctx.ws.close(1008, 'Invalid token');
+    }
+  },
+  
+  message: async (ctx, message) => {
+    // Re-validate on each message if needed
+    const data = JSON.parse(message);
+    
+    // Process authenticated message
+    console.log('Secure message:', data);
+    
+    ctx.ws.send(JSON.stringify({
+      type: 'ack',
+      messageId: data.id,
+      timestamp: Date.now()
+    }));
+  }
+});
+```
+
+### Client-Side WebSocket Usage
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Chat</title>
+</head>
+<body>
+    <div id="messages"></div>
+    <input type="text" id="messageInput" placeholder="Type a message...">
+    <button onclick="sendMessage()">Send</button>
+    
+    <script>
+        const ws = new WebSocket('ws://localhost:3000/chat/general');
+        const messages = document.getElementById('messages');
+        const messageInput = document.getElementById('messageInput');
+        
+        ws.onopen = function() {
+            console.log('Connected to chat');
+        };
+        
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            const messageElement = document.createElement('div');
+            
+            if (data.type === 'message') {
+                messageElement.innerHTML = `<strong>${data.user}:</strong> ${data.content}`;
+            } else {
+                messageElement.innerHTML = `<em>${data.message}</em>`;
+            }
+            
+            messages.appendChild(messageElement);
+            messages.scrollTop = messages.scrollHeight;
+        };
+        
+        ws.onerror = function(error) {
+            console.error('WebSocket error:', error);
+        };
+        
+        ws.onclose = function(event) {
+            console.log('Connection closed:', event.code, event.reason);
+        };
+        
+        function sendMessage() {
+            const content = messageInput.value.trim();
+            if (content) {
+                ws.send(JSON.stringify({
+                    user: 'User' + Math.floor(Math.random() * 1000),
+                    content: content
+                }));
+                messageInput.value = '';
+            }
+        }
+        
+        messageInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
+```
+
 ## File Upload Features
 
 Comprehensive multipart/form-data support with security and validation:
@@ -413,6 +772,8 @@ The `examples/` directory contains comprehensive examples organized by feature:
 - **Middleware**: Authentication, logging, and middleware composition
 - **Pipeline**: Advanced state composition and transformation
 - **File Upload**: Complete file upload implementation with client interface
+- **Streaming**: Real-time streaming responses with all streaming types
+- **WebSocket**: Type-safe WebSocket implementation with chat examples
 
 ```bash
 # Run specific examples
@@ -421,6 +782,9 @@ bun run examples/basic/simple-server.ts              # Port 3001 - Basic server
 bun run examples/middleware/auth-example.ts          # Port 3002 - Middleware
 bun run examples/pipeline/advanced-pipeline.ts      # Port 3003 - Pipelines
 bun run examples/file-upload/upload-demo.ts         # Port 3004 - File uploads
+bun run examples/streaming/streaming-demo.ts        # Port 3000 - Streaming demo
+bun run examples/streaming/quick-test.ts             # Port 3000 - Quick streaming test
+bun run examples/websocket/ws-demo.ts                # Port 3000 - WebSocket chat demo
 ```
 
 ## Testing
@@ -452,6 +816,8 @@ Complete middleware ecosystem for common web development needs:
 - **File Upload**: Multipart/form-data handling with comprehensive validation
 - **Static Files**: Efficient static file serving with caching
 - **Proxy**: Request forwarding and proxying with header manipulation
+- **Streaming**: Real-time data streaming with multiple protocols
+- **WebSocket**: Type-safe WebSocket connections with event handling
 - **Error Handling**: Structured error responses with stack traces
 
 ## API Reference
@@ -476,6 +842,12 @@ interface ImphnenOptions {
     prefix?: string;                // URL prefix (default: '/')
   };
   proxy?: boolean;                  // Enable proxy features
+  websocket?: {                     // WebSocket configuration
+    maxPayloadLength?: number;      // Max message size (bytes)
+    idleTimeout?: number;           // Connection timeout (seconds)
+    backpressureLimit?: number;     // Backpressure limit
+    compression?: boolean;          // Enable compression
+  };
 }
 ```
 
@@ -500,11 +872,70 @@ interface Context {
   file(path: string, options?: FileOptions): Promise<Response>;
   proxy(target: string, options?: ProxyOptions): Promise<Response>;
   
+  // Streaming response methods
+  createStream(options?: StreamingOptions): Promise<StreamController>;
+  streamResponse(generator: AsyncGenerator<string | Uint8Array>, options?: StreamingOptions): Response;
+  chunkedResponse(chunks: (string | Uint8Array)[], options?: ChunkOptions): Response;
+  sseResponse(generator: AsyncGenerator<any>, options?: ServerSentEventOptions): Response;
+  
   // Header/status utilities
   set: {
     headers(headers: Record<string, string>): void;
     status(status: number): void;
   };
+}
+```
+
+### WebSocket Context and Types
+
+```typescript
+interface WebSocketContext<TParams = Record<string, string>> {
+  ws: WebSocket;                    // WebSocket connection
+  params: TParams;                  // Route parameters (typed)
+  query: Record<string, string>;    // Query parameters
+  headers: Headers;                 // Request headers
+  url: URL;                         // Request URL
+}
+
+interface WebSocketHandler<TParams = Record<string, string>> {
+  open?: (ctx: WebSocketContext<TParams>) => void | Promise<void>;
+  message?: (ctx: WebSocketContext<TParams>, message: string | Buffer) => void | Promise<void>;
+  close?: (ctx: WebSocketContext<TParams>, code?: number, reason?: string) => void | Promise<void>;
+  error?: (ctx: WebSocketContext<TParams>, error: Error) => void | Promise<void>;
+}
+
+// WebSocket route registration
+app.ws<'/chat/:room'>(path, handler); // Type-safe route parameters
+```
+
+### Streaming Types and Options
+
+```typescript
+interface StreamingOptions {
+  contentType?: string;             // MIME type (default: 'text/plain')
+  headers?: Record<string, string>; // Additional headers
+  bufferSize?: number;              // Buffer size in bytes
+  flushInterval?: number;           // Auto-flush interval in ms
+}
+
+interface ChunkOptions {
+  encoding?: 'utf-8' | 'base64' | 'hex'; // Text encoding
+  headers?: Record<string, string>;      // Additional headers
+}
+
+interface ServerSentEventOptions {
+  id?: string;                      // Event ID
+  event?: string;                   // Event type
+  retry?: number;                   // Reconnection time in ms
+  headers?: Record<string, string>; // Additional headers
+}
+
+interface StreamController {
+  response: Response;               // Stream response object
+  write: (chunk: string | Uint8Array) => void;        // Write data
+  writeChunk: (data: any, options?: ChunkOptions) => void;  // Write HTTP chunk
+  writeSSE: (data: any, options?: ServerSentEventOptions) => void; // Write SSE event
+  close: () => void;                // Close stream
 }
 ```
 
@@ -566,12 +997,14 @@ Complete TypeScript definitions provide:
 This framework is feature-complete and production-ready:
 
 - ✅ Complete application functionality with file uploads and proxy support
+- ✅ Real-time streaming responses with manual control, generators, and SSE
+- ✅ Type-safe WebSocket support with comprehensive event handling
 - ✅ Comprehensive TypeScript type definitions for all features
-- ✅ Organized examples by feature with interactive clients
+- ✅ Organized examples by feature with interactive clients and streaming demos
 - ✅ Complete test suite with unit, integration, and performance tests
 - ✅ Zero TypeScript compilation errors across all code
-- ✅ Verified functionality with comprehensive test coverage
+- ✅ Verified functionality with comprehensive test coverage including streaming
 - ✅ Complete documentation in docs/ directory with guides and examples
 - ✅ Security features: CORS, file validation, path traversal prevention
-- ✅ Performance optimizations for file handling and request processing
+- ✅ Performance optimizations for file handling, streaming, and request processing
 - ✅ Production deployment ready with error handling and logging
