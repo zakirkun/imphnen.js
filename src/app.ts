@@ -9,7 +9,10 @@ import type {
   RouteParams,
   UploadedFile,
   ProxyOptions,
-  CombinedMiddleware
+  CombinedMiddleware,
+  WebSocketHandler,
+  WebSocketRoute,
+  WebSocketContext
 } from './types.js';
 import { matchRoute, parseURLParams, parseQuery, parseBody, combineMiddleware, MiddlewareChain, proxyRequest } from './utils.js';
 import { createContext } from './context.js';
@@ -37,6 +40,7 @@ export class Imphnen {
   private globalMiddlewares: Middleware[] = [];
   private globalPipeline: MiddlewarePipeline = MiddlewarePipeline.create();
   private options: ImphnenOptions;
+  private wsRoutes: WebSocketRoute[] = [];
 
   constructor(options: ImphnenOptions = {}) {
     this.options = {
@@ -53,48 +57,52 @@ export class Imphnen {
         trustProxy: false,
         timeout: 30000 // 30 seconds
       },
+      websocket: {
+        maxPayloadLength: 16 * 1024 * 1024, // 16MB default
+        idleTimeout: 120, // 2 minutes
+        backpressureLimit: 64 * 1024, // 64KB
+        compression: false
+      },
       ...options
     };
   }
 
-  // Create a new pipeline
+  // Create a pipeline with initial state
   pipeline<TState extends MiddlewareState = {}>(
     initialState?: TState
   ): MiddlewarePipeline<{}, {}, unknown, TState> {
     return MiddlewarePipeline.create(initialState);
   }
 
-  // Enhanced middleware registration with support for combined middleware
+  // Add global middleware
   use<TParams extends Record<string, string> = {}, TQuery extends Record<string, string> = {}, TBody = unknown>(
     middleware: Middleware<TParams, TQuery, TBody> | PipelineMiddleware<{}, {}, unknown, {}, any> | CombinedMiddleware<TParams, TQuery, TBody>
   ): this {
     if (Array.isArray(middleware)) {
       // Handle combined middleware array
-      const combined = combineMiddleware(...middleware);
-      this.globalMiddlewares.push(combined as Middleware);
-    } else if (typeof middleware === 'function' && middleware.length === 2) {
-      // Pipeline middleware
-      this.globalPipeline = this.globalPipeline.use(middleware as PipelineMiddleware<{}, {}, unknown, {}, any>);
+      this.globalMiddlewares.push(...(middleware as Middleware[]));
+    } else if ('execute' in middleware) {
+      // Handle pipeline middleware - add to global pipeline
+      this.globalPipeline = this.globalPipeline.use(middleware as any);
     } else {
-      // Traditional middleware
+      // Handle regular middleware
       this.globalMiddlewares.push(middleware as Middleware);
     }
     return this;
   }
 
-  // Utility method to combine multiple middleware
+  // Middleware combination utilities
   combine<TParams extends Record<string, string> = {}, TQuery extends Record<string, string> = {}, TBody = unknown>(
     ...middlewares: Middleware<TParams, TQuery, TBody>[]
   ): Middleware<TParams, TQuery, TBody> {
     return combineMiddleware(...middlewares);
   }
 
-  // Create middleware chain builder
   chain<TParams extends Record<string, string> = {}, TQuery extends Record<string, string> = {}, TBody = unknown>(): MiddlewareChain<TParams, TQuery, TBody> {
     return new MiddlewareChain<TParams, TQuery, TBody>();
   }
 
-  // Register route with pipeline
+  // Pipeline-based routes
   route<
     TPath extends string,
     TState extends MiddlewareState,
@@ -114,32 +122,46 @@ export class Imphnen {
     return this;
   }
 
-  // Proxy route registration
-  proxy(path: string, options: ProxyOptions): this {
-    this.get(path, async (ctx: any) => {
-      return await ctx.proxy(options);
+  // WebSocket route registration
+  ws<TPath extends string>(
+    path: TPath,
+    handler: WebSocketHandler<RouteParams<TPath>>
+  ): this {
+    this.wsRoutes.push({
+      path,
+      handler: handler as WebSocketHandler<any>
     });
-    
-    this.post(path, async (ctx: any) => {
-      return await ctx.proxy(options);
-    });
-    
-    this.put(path, async (ctx: any) => {
-      return await ctx.proxy(options);
-    });
-    
-    this.delete(path, async (ctx: any) => {
-      return await ctx.proxy(options);
-    });
-    
-    this.patch(path, async (ctx: any) => {
-      return await ctx.proxy(options);
-    });
-    
     return this;
   }
 
-  // HTTP method handlers with enhanced type inference and pipeline support
+  // Proxy routes
+  proxy(path: string, options: ProxyOptions): this {
+    this.routes.push({
+      method: 'GET',
+      path,
+      handler: async (ctx) => {
+        return await ctx.proxy(options);
+      },
+      middlewares: []
+    });
+
+    // Also handle other HTTP methods for proxy
+    const proxyMethods: HTTPMethod[] = ['POST', 'PUT', 'DELETE', 'PATCH'];
+    proxyMethods.forEach(method => {
+      this.routes.push({
+        method,
+        path,
+        handler: async (ctx) => {
+          return await ctx.proxy(options);
+        },
+        middlewares: []
+      });
+    });
+
+    return this;
+  }
+
+  // HTTP method handlers with enhanced overloads
   get<TPath extends string, TState extends MiddlewareState = {}>(
     path: TPath,
     ...args: [
@@ -152,15 +174,18 @@ export class Imphnen {
       StateHandler<any, {}, unknown, {}>
     ]
   ): this {
-    if (args.length === 1) {
-      // Single handler
-      return this.route('GET', path, MiddlewarePipeline.create<any, {}, unknown, {}>(), args[0] as StateHandler<any, {}, unknown, {}>);
-    } else if (args.length === 2 && typeof args[0] === 'object' && 'execute' in args[0]) {
+    if (args.length === 2 && 'execute' in args[0]) {
       // Pipeline + handler
-      return this.route('GET', path, args[0] as MiddlewarePipeline<any, {}, unknown, TState>, args[1] as StateHandler<any, {}, unknown, TState>);
+      const [pipeline, handler] = args as [MiddlewarePipeline<any, {}, unknown, TState>, StateHandler<any, {}, unknown, TState>];
+      return this.route('GET', path, pipeline, handler);
+    } else if (args.length === 1) {
+      // Just handler
+      const [handler] = args as [Handler<any>];
+      return this.addRoute('GET', path, [handler]);
     } else {
-      // Traditional middleware + handler
-      return this.addRoute('GET', path, args as [...Middleware[], Handler]);
+      // Middlewares + handler
+      const allArgs = args as [...Middleware<any>[], Handler<any>];
+      return this.addRoute('GET', path, allArgs);
     }
   }
 
@@ -173,15 +198,21 @@ export class Imphnen {
       MiddlewarePipeline<any, {}, TBody, TState>,
       StateHandler<any, {}, TBody, TState>
     ] | [
-      StateHandler<any, {}, TBody, {}>
+      Handler<any, {}, TBody>
     ]
   ): this {
-    if (args.length === 1) {
-      return this.route('POST', path, MiddlewarePipeline.create<any, {}, TBody, {}>(), args[0] as StateHandler<any, {}, TBody, {}>);
-    } else if (args.length === 2 && typeof args[0] === 'object' && 'execute' in args[0]) {
-      return this.route('POST', path, args[0] as MiddlewarePipeline<any, {}, TBody, TState>, args[1] as StateHandler<any, {}, TBody, TState>);
+    if (args.length === 2 && 'execute' in args[0]) {
+      // Pipeline + handler
+      const [pipeline, handler] = args as [MiddlewarePipeline<any, {}, TBody, TState>, StateHandler<any, {}, TBody, TState>];
+      return this.route('POST', path, pipeline, handler);
+    } else if (args.length === 1) {
+      // Just handler
+      const [handler] = args as [Handler<any, {}, TBody>];
+      return this.addRoute('POST', path, [handler as Handler]);
     } else {
-      return this.addRoute('POST', path, args as [...Middleware[], Handler]);
+      // Middlewares + handler
+      const allArgs = args as [...Middleware<any, {}, TBody>[], Handler<any, {}, TBody>];
+      return this.addRoute('POST', path, allArgs as [...Middleware[], Handler]);
     }
   }
 
@@ -194,15 +225,21 @@ export class Imphnen {
       MiddlewarePipeline<any, {}, TBody, TState>,
       StateHandler<any, {}, TBody, TState>
     ] | [
-      StateHandler<any, {}, TBody, {}>
+      Handler<any, {}, TBody>
     ]
   ): this {
-    if (args.length === 1) {
-      return this.route('PUT', path, MiddlewarePipeline.create<any, {}, TBody, {}>(), args[0] as StateHandler<any, {}, TBody, {}>);
-    } else if (args.length === 2 && typeof args[0] === 'object' && 'execute' in args[0]) {
-      return this.route('PUT', path, args[0] as MiddlewarePipeline<any, {}, TBody, TState>, args[1] as StateHandler<any, {}, TBody, TState>);
+    if (args.length === 2 && 'execute' in args[0]) {
+      // Pipeline + handler
+      const [pipeline, handler] = args as [MiddlewarePipeline<any, {}, TBody, TState>, StateHandler<any, {}, TBody, TState>];
+      return this.route('PUT', path, pipeline, handler);
+    } else if (args.length === 1) {
+      // Just handler
+      const [handler] = args as [Handler<any, {}, TBody>];
+      return this.addRoute('PUT', path, [handler as Handler]);
     } else {
-      return this.addRoute('PUT', path, args as [...Middleware[], Handler]);
+      // Middlewares + handler
+      const allArgs = args as [...Middleware<any, {}, TBody>[], Handler<any, {}, TBody>];
+      return this.addRoute('PUT', path, allArgs as [...Middleware[], Handler]);
     }
   }
 
@@ -218,12 +255,15 @@ export class Imphnen {
       StateHandler<any, {}, unknown, {}>
     ]
   ): this {
-    if (args.length === 1) {
-      return this.route('DELETE', path, MiddlewarePipeline.create<any, {}, unknown, {}>(), args[0] as StateHandler<any, {}, unknown, {}>);
-    } else if (args.length === 2 && typeof args[0] === 'object' && 'execute' in args[0]) {
-      return this.route('DELETE', path, args[0] as MiddlewarePipeline<any, {}, unknown, TState>, args[1] as StateHandler<any, {}, unknown, TState>);
+    if (args.length === 2 && 'execute' in args[0]) {
+      const [pipeline, handler] = args as [MiddlewarePipeline<any, {}, unknown, TState>, StateHandler<any, {}, unknown, TState>];
+      return this.route('DELETE', path, pipeline, handler);
+    } else if (args.length === 1) {
+      const [handler] = args as [Handler<any>];
+      return this.addRoute('DELETE', path, [handler]);
     } else {
-      return this.addRoute('DELETE', path, args as [...Middleware[], Handler]);
+      const allArgs = args as [...Middleware<any>[], Handler<any>];
+      return this.addRoute('DELETE', path, allArgs);
     }
   }
 
@@ -236,33 +276,42 @@ export class Imphnen {
       MiddlewarePipeline<any, {}, TBody, TState>,
       StateHandler<any, {}, TBody, TState>
     ] | [
-      StateHandler<any, {}, TBody, {}>
+      Handler<any, {}, TBody>
     ]
   ): this {
-    if (args.length === 1) {
-      return this.route('PATCH', path, MiddlewarePipeline.create<any, {}, TBody, {}>(), args[0] as StateHandler<any, {}, TBody, {}>);
-    } else if (args.length === 2 && typeof args[0] === 'object' && 'execute' in args[0]) {
-      return this.route('PATCH', path, args[0] as MiddlewarePipeline<any, {}, TBody, TState>, args[1] as StateHandler<any, {}, TBody, TState>);
+    if (args.length === 2 && 'execute' in args[0]) {
+      // Pipeline + handler
+      const [pipeline, handler] = args as [MiddlewarePipeline<any, {}, TBody, TState>, StateHandler<any, {}, TBody, TState>];
+      return this.route('PATCH', path, pipeline, handler);
+    } else if (args.length === 1) {
+      // Just handler
+      const [handler] = args as [Handler<any, {}, TBody>];
+      return this.addRoute('PATCH', path, [handler as Handler]);
     } else {
-      return this.addRoute('PATCH', path, args as [...Middleware[], Handler]);
+      // Middlewares + handler
+      const allArgs = args as [...Middleware<any, {}, TBody>[], Handler<any, {}, TBody>];
+      return this.addRoute('PATCH', path, allArgs as [...Middleware[], Handler]);
     }
   }
 
+  // Helper to add traditional routes
   private addRoute<TPath extends string>(
     method: HTTPMethod,
     path: TPath,
     handlers: [...Middleware[], Handler]
   ): this {
+    if (handlers.length === 0) return this;
+    
     const handler = handlers[handlers.length - 1] as Handler;
     const middlewares = handlers.slice(0, -1) as Middleware[];
-
+    
     this.routes.push({
       method,
       path,
       handler,
       middlewares
     });
-
+    
     return this;
   }
 
@@ -333,6 +382,36 @@ export class Imphnen {
     }
   }
 
+  // WebSocket upgrade handler
+  private handleWebSocketUpgrade(request: Request, server: any): Response | undefined {
+    const url = new URL(request.url);
+    const pathname = url.pathname;
+
+    // Find matching WebSocket route
+    const wsRoute = this.wsRoutes.find(route => matchRoute(route.path, pathname));
+    
+    if (!wsRoute) {
+      return undefined; // No WebSocket route found
+    }
+
+    // Parse route parameters and query
+    const params = parseURLParams(wsRoute.path, pathname);
+    const query = parseQuery(url);
+
+    // Upgrade to WebSocket
+    const success = server.upgrade(request, {
+      data: {
+        route: wsRoute,
+        params,
+        query,
+        headers: request.headers,
+        url
+      }
+    });
+
+    return success ? undefined : new Response('WebSocket upgrade failed', { status: 400 });
+  }
+
   private async handlePipelineRoute(
     route: PipelineRouteDefinition,
     request: Request,
@@ -383,9 +462,15 @@ export class Imphnen {
     const next = async (): Promise<Response> => {
       if (index < middlewares.length) {
         const middleware = middlewares[index++];
-        if (middleware) {
-          return await middleware(ctx, next);
+        // Ensure middleware exists before calling
+        if (!middleware) {
+          return await next();
         }
+        return await middleware(ctx, next);
+      }
+      // Ensure handler exists before calling
+      if (!handler) {
+        throw new Error('No handler provided');
       }
       return await handler(ctx);
     };
@@ -394,42 +479,109 @@ export class Imphnen {
   }
 
   private handleCors(request: Request): Response {
-    const corsOptions = typeof this.options.cors === 'object' 
-      ? this.options.cors 
+    const corsOptions = typeof this.options.cors === 'object'
+      ? this.options.cors
       : {};
 
-    const headers = new Headers();
-    
     const origin = corsOptions.origin;
-    const originHeader = Array.isArray(origin) ? origin.join(', ') : (origin || '*');
-    
-    headers.set('Access-Control-Allow-Origin', originHeader);
-    
-    headers.set('Access-Control-Allow-Methods', 
-      corsOptions.methods?.join(', ') || 'GET, POST, PUT, DELETE, PATCH, OPTIONS'
-    );
-    
-    headers.set('Access-Control-Allow-Headers', 
-      corsOptions.headers?.join(', ') || 'Content-Type, Authorization'
-    );
+    const requestOrigin = request.headers.get('origin');
 
-    return new Response(null, { status: 204, headers });
+    let allowOrigin = '*';
+    if (typeof origin === 'string') {
+      allowOrigin = origin;
+    } else if (Array.isArray(origin) && requestOrigin) {
+      allowOrigin = origin.includes(requestOrigin) ? requestOrigin : 'null';
+    } else if (requestOrigin) {
+      allowOrigin = requestOrigin;
+    }
+
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': allowOrigin,
+        'Access-Control-Allow-Methods': 
+          corsOptions.methods?.join(', ') || 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+        'Access-Control-Allow-Headers': 
+          corsOptions.headers?.join(', ') || 'Content-Type, Authorization'
+      }
+    });
   }
 
-  // Start the server
+  // Start the server with WebSocket support
   async listen(port?: number): Promise<void> {
     const serverPort = port || this.options.port || 3000;
     
     const server = Bun.serve({
       port: serverPort,
       hostname: this.options.hostname,
-      fetch: (request) => this.handleRequest(request),
+      fetch: (request, server) => {
+        // Try WebSocket upgrade first
+        const wsResponse = this.handleWebSocketUpgrade(request, server);
+        if (wsResponse !== undefined) {
+          return wsResponse;
+        }
+        
+        // Handle regular HTTP request
+        return this.handleRequest(request);
+      },
+      websocket: {
+        maxPayloadLength: this.options.websocket?.maxPayloadLength,
+        idleTimeout: this.options.websocket?.idleTimeout,
+        backpressureLimit: this.options.websocket?.backpressureLimit,
+        // compression: this.options.websocket?.compression, // Remove if not supported
+        
+        open: (ws: any) => {
+          const data = ws.data as any;
+          const ctx: WebSocketContext = {
+            ws: ws as any, // Cast to match our interface
+            params: data.params,
+            query: data.query,
+            headers: data.headers,
+            url: data.url
+          };
+          
+          if (data.route?.handler?.open) {
+            data.route.handler.open(ctx);
+          }
+        },
+        
+        message: (ws: any, message: string | Buffer) => {
+          const data = ws.data as any;
+          const ctx: WebSocketContext = {
+            ws: ws as any, // Cast to match our interface
+            params: data.params,
+            query: data.query,
+            headers: data.headers,
+            url: data.url
+          };
+          
+          if (data.route?.handler?.message) {
+            data.route.handler.message(ctx, message);
+          }
+        },
+        
+        close: (ws: any, code?: number, reason?: string) => {
+          const data = ws.data as any;
+          const ctx: WebSocketContext = {
+            ws: ws as any, // Cast to match our interface
+            params: data.params,
+            query: data.query,
+            headers: data.headers,
+            url: data.url
+          };
+          
+          if (data.route?.handler?.close) {
+            data.route.handler.close(ctx, code, reason);
+          }
+        }
+      },
       development: this.options.development
     });
 
     console.log(`🚀 Imphnen server running on http://${this.options.hostname}:${serverPort}`);
     console.log(`📁 File uploads: ${this.options.uploads?.maxFileSize ? `Max ${this.options.uploads.maxFileSize} bytes` : 'Disabled'}`);
     console.log(`🔗 Proxy support: ${this.options.proxy ? 'Enabled' : 'Disabled'}`);
+    console.log(`🔌 WebSocket support: ${this.wsRoutes.length > 0 ? `${this.wsRoutes.length} routes` : 'No routes'}`);
     
     return new Promise(() => {}); // Keep server running
   }

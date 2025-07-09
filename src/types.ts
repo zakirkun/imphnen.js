@@ -17,6 +17,29 @@ export type RouteParams<T extends string> =
 // Fallback route params type for complex patterns
 export type AnyRouteParams = Record<string, string>;
 
+// WebSocket context with support for both required and optional params
+export interface WebSocketContext<TParams extends Record<string, string | undefined> = {}> {
+  ws: WebSocket;
+  params: TParams;
+  query: Record<string, string>;
+  headers: Headers;
+  url: URL;
+}
+
+// WebSocket handler with support for optional params
+export type WebSocketHandler<TParams extends Record<string, string | undefined> = {}> = {
+  open?: (ctx: WebSocketContext<TParams>) => void | Promise<void>;
+  message?: (ctx: WebSocketContext<TParams>, message: string | Buffer) => void | Promise<void>;
+  close?: (ctx: WebSocketContext<TParams>, code?: number, reason?: string) => void | Promise<void>;
+  error?: (ctx: WebSocketContext<TParams>, error: Error) => void | Promise<void>;
+};
+
+// WebSocket route interface
+export interface WebSocketRoute {
+  path: string;
+  handler: WebSocketHandler<any>;
+}
+
 // File upload types
 export interface UploadedFile {
   name: string;
@@ -131,5 +154,12 @@ export interface ImphnenOptions {
   proxy?: {
     trustProxy?: boolean;
     timeout?: number;
+  };
+  // WebSocket options
+  websocket?: {
+    maxPayloadLength?: number;
+    idleTimeout?: number;
+    backpressureLimit?: number;
+    compression?: boolean;
   };
 } 
